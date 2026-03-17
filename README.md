@@ -69,7 +69,7 @@ O dataset **não é balanceado**. A distribuição é invertida em relação ao 
 
 - Holdout **70% treino / 30% teste**
 - `numpy.random.seed(42)` para reprodutibilidade
-- Mini-batch SGD com `batch_size=16` via `DataLoader`
+- Mini-batch SGD com `batch_size=16`
 
 ---
 
@@ -79,7 +79,7 @@ O dataset **não é balanceado**. A distribuição é invertida em relação ao 
 ```
 input (101) → Linear(100) → ReLU → Linear(1)
 ```
-- Otimizador: SGD, `lr=1e-4`
+- Otimizador: SGD, `lr=10e-4`
 - Épocas: 100
 - Loss: `BCEWithLogitsLoss`
 
@@ -87,7 +87,7 @@ input (101) → Linear(100) → ReLU → Linear(1)
 ```
 input (101) → Linear(100) → ReLU → Linear(50) → ReLU → Linear(1)
 ```
-- Otimizador: SGD, `lr=1e-4`
+- Otimizador: SGD, `lr=10e-4`
 - Épocas: 100
 - Loss: `BCEWithLogitsLoss`
 
@@ -95,7 +95,7 @@ input (101) → Linear(100) → ReLU → Linear(50) → ReLU → Linear(1)
 ```
 input (101) → Linear(128) → ReLU → Linear(64) → ReLU → Linear(1)
 ```
-- Otimizador: SGD com momentum, `lr=1e-3`, `momentum=0.9`
+- Otimizador: SGD com momentum, `lr=10e-4`, `momentum=0.9`
 - Épocas: 150
 - Loss: `BCEWithLogitsLoss`
 
@@ -107,10 +107,10 @@ input (101) → Linear(128) → ReLU → Linear(64) → ReLU → Linear(1)
 
 | Rede | Arquitetura | Épocas | lr | Acurácia Bal. | Precisão | Revocação | F1-Score |
 |---|---|---|---|---|---|---|---|
-| MLP1 | input→100→1 | 100 | 1e-4 | 0.51 | 0.53 | 0.51 | 0.35 |
-| MLP2 | input→100→50→1 | 100 | 1e-4 | 0.52 | 0.52 | 0.52 | 0.48 |
-| **MLP3** | **input→128→64→1** | **150** | **1e-3** | **0.80** | **0.81** | **0.80** | **0.80** |
-| MLP4* | input→128→64→1 | 200 | 1e-3 | 0.84 | 0.84 | 0.84 | 0.84 |
+| MLP1 | input→100→1 | 100 | 10e-4 | 0.51 | 0.53 | 0.51 | 0.35 |
+| MLP2 | input→100→50→1 | 100 | 10e-4 | 0.52 | 0.52 | 0.52 | 0.48 |
+| **MLP3** | **input→128→64→1** | **150** | **10e-4** | **0.85** | **0.84** | **0.85** | **0.85** |
+| MLP4* | input→128→64→1 | 200 | 10e-4 | 0.84 | 0.84 | 0.84 | 0.84 |
 
 *MLP4 é a mesma arquitetura da MLP3 com 200 épocas, usada para investigar o efeito de treino adicional.
 
@@ -118,11 +118,18 @@ Todas as métricas são calculadas com `average="macro"` (peso igual para cada c
 
 ### Análise dos resultados
 
-MLP1 e MLP2 convergiram para soluções degeneradas (~0.51 de acurácia balanceada), essencialmente classificando todos os exemplos na classe majoritária. O problema foi o otimizador: SGD puro com `lr=1e-4` é conservador demais para mini-batches de 16 exemplos, onde os gradientes são barulhentos.
+1. PERFORMANCE\
+A Nossa rede MLP3 superou a MLP1 e MLP2.
 
-A MLP3 resolveu isso com dois ajustes: `lr` 10× maior e `momentum=0.9`. O momentum acumula a direção do gradiente entre batches, filtrando o ruído do mini-batch e mantendo trajetória coerente — o que levou a uma convergência de ~0.07 de loss ao final das 150 épocas.
+2. EFICIÊNCIA\
+MLP1 é a mais rápida de treinar (menos parâmetros e 100 épocas).\
+MLP3, apesar de ter mais épocas (150), converge de forma mais suave.
 
-A MLP4 (200 épocas) alcançou 0.84, mas a diferença marginal em relação à MLP3 sugere que a rede já convergiu por volta das 150 épocas. Aumentar épocas além desse ponto traz retorno decrescente e risco de overfitting.
+3. ADERÊNCIA AO PROBLEMA\
+O Adult Income Dataset é de classificação binária com features mistas (numéricas + OHE).\
+A MLP3, com maior largura (128→64 vs 100→50) e otimização mais agressiva, conseguiu aprender representações úteis para ambas as classes, como evidenciam as métricas macro equilibradas (~0.85 em todas).
+
+Conclusão: Nossa rede MLP3 obteve o melhor desempenho global nesta tarefa, consistente em todas as métricas balanceadas. O fator decisivo foi a escolha do otimizador: SGD com momentum é substancialmente mais eficaz que SGD puro para este dataset com mini-batch de tamanho 16.
 
 ---
 
@@ -137,23 +144,27 @@ scikit-learn
 prettytable
 ```
 
-Gerenciamento de ambiente recomendado com `uv`:
+## Como executar
+
+### Com uv (recomendado)
 
 ```bash
 uv sync
-```
-
----
-
-## Como executar
-
-1. Baixe o dataset em https://archive.ics.uci.edu/dataset/2/adult e coloque os arquivos na pasta `adult/` renomeando para `adult_train.csv` e `adult_test.csv`
-2. Ative o ambiente virtual e abra o notebook:
-
-```bash
 uv run jupyter notebook Topicos1-2026_1-Tarefa2.ipynb
 ```
 
-3. Execute as células na ordem — todo o fluxo (carregamento, pré-processamento, treino, avaliação e comparação) está sequencial no notebook.
+### Com venv
+
+```bash
+python -m venv .venv
+source .venv/bin/activate        # Linux/Mac
+.venv\Scripts\activate           # Windows
+
+pip install torch polars matplotlib scikit-learn prettytable jupyter ipykernel
+python -m ipykernel install --user --name=mlp-adult
+
+jupyter notebook Topicos1-2026_1-Tarefa2.ipynb
+```
+> Ao abrir o notebook no Jupyter, selecione o kernel `mlp-adult` em vez do padrão do sistema.
 
 **README feito com IA**
